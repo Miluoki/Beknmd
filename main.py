@@ -15,7 +15,7 @@ from gtts import gTTS
 from tempfile import NamedTemporaryFile
 
 API_TOKEN = os.getenv("TG_API")
-OPENROUTER_API_KEY = os.getenv("OPENROUTER")
+OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 ELEVENLABS_KEY = os.getenv("ELEVEN_KEY")
 WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_HOSTNAME")
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
@@ -60,7 +60,7 @@ async def get_ai_response(prompt: str, user_id: int) -> str:
     history = user_context.get(user_id, [])[-5:]
     messages = [{"role": "system", "content": f"You are a {mode} character who replies in {lang}"}] + history + [{"role": "user", "content": prompt}]
 
-    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
     payload = {"model": "openchat/openchat-3.5-0106", "messages": messages}
 
     async with aiohttp.ClientSession() as session:
