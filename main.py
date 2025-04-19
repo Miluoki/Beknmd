@@ -9,13 +9,13 @@ import asyncio
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, BotCommand
-from aiogram.utils.executor import start_webhook
+from aiogram.utils.executor import set_webhook, start_webhook
 import aiohttp
 from gtts import gTTS
 from tempfile import NamedTemporaryFile
 
 API_TOKEN = os.getenv("TG_API")
-OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_KEY")
 ELEVENLABS_KEY = os.getenv("ELEVEN_KEY")
 WEBHOOK_HOST = os.getenv("RENDER_EXTERNAL_HOSTNAME")
 WEBHOOK_PATH = f"/webhook/{API_TOKEN}"
@@ -60,7 +60,7 @@ async def get_ai_response(prompt: str, user_id: int) -> str:
     history = user_context.get(user_id, [])[-5:]
     messages = [{"role": "system", "content": f"You are a {mode} character who replies in {lang}"}] + history + [{"role": "user", "content": prompt}]
 
-    headers = {"Authorization": f"Bearer {OPENROUTER_KEY}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {OPENROUTER_API_KEY}", "Content-Type": "application/json"}
     payload = {"model": "openchat/openchat-3.5-0106", "messages": messages}
 
     async with aiohttp.ClientSession() as session:
@@ -88,7 +88,7 @@ async def speak(text: str, user_id: int) -> str:
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=json_data) as resp:
                 if resp.status == 429:
-                    return "📋 ElevenLabs limit reached."
+                    return "📛 ElevenLabs limit reached."
                 if resp.status != 200:
                     raise Exception("Eleven failed")
                 data = await resp.read()
@@ -107,14 +107,6 @@ async def start(msg: types.Message):
     init_user(uid)
     await msg.answer("👋 Welcome to BEKNMD — digital nomad is online. Type /help")
 
-@dp.message_handler(commands=["help"])
-async def help_cmd(msg: Message):
-    await msg.answer("""🤖 Available Commands:
-/start /help /ask /speak
-/voice_on /voice_off
-/language /mode /voice
-/wisdom /meme /time""")
-
 @dp.message_handler(commands=["ask"])
 async def ask_cmd(msg: types.Message):
     uid = str(msg.from_user.id)
@@ -128,6 +120,18 @@ async def ask_cmd(msg: types.Message):
     if user_prefs[uid].get("voice_mode"):
         audio = await speak(reply, uid)
         await msg.answer_voice(types.InputFile(audio))
+
+@dp.message_handler(commands=["speak"])
+async def speak_cmd(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    ctx = user_context.get(uid, [])
+    if not ctx:
+        await msg.answer("🛑 Nothing to speak yet. Use /ask first.")
+        return
+    text = ctx[-1]["content"]
+    audio = await speak(text, uid)
+    await msg.answer_voice(types.InputFile(audio))
 
 @dp.message_handler(commands=["voice_on"])
 async def voice_on(msg: Message):
@@ -200,50 +204,33 @@ async def wisdom(msg: Message):
 async def time_cmd(msg: Message):
     await msg.answer("⏰ Server time: " + datetime.now().strftime("%H:%M:%S — %d.%m.%Y"))
 
-@dp.message_handler(commands=["speak"])
-async def speak_cmd(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    ctx = user_context.get(uid, [])
-    if not ctx:
-        await msg.answer("🛑 Nothing to speak yet. Use /ask first.")
-        return
-    text = ctx[-1]["content"]
-    audio = await speak(text, uid)
-    await msg.answer_voice(types.InputFile(audio))
-
 @dp.message_handler()
-async def fallback(msg: types.Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    reply = await get_ai_response(msg.text, uid)
-    await msg.answer(reply)
-    if user_prefs[uid].get("voice_mode"):
-        audio = await speak(reply, uid)
-        await msg.answer_voice(types.InputFile(audio))
+async def fallback(msg: Message):
+    await msg.answer("⚠️ Unknown command. Type /help")
 
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
     await bot.set_my_commands([
-        BotCommand("start", "Запустить бота"),
-        BotCommand("help", "Список команд"),
-        BotCommand("ask", "Задать вопрос AI"),
-        BotCommand("speak", "Озвучить последний ответ"),
-        BotCommand("voice_on", "Включить озвучку"),
-        BotCommand("voice_off", "Выключить озвучку"),
-        BotCommand("language", "Выбрать язык"),
-        BotCommand("mode", "Сменить вайб"),
-        BotCommand("voice", "Выбрать голос"),
-        BotCommand("meme", "Получить мем"),
-        BotCommand("wisdom", "Слово мудрости"),
-        BotCommand("time", "Время сервера")
+        BotCommand("start", "Launch the nomad's world"),
+        BotCommand("help", "Show help menu"),
+        BotCommand("ask", "Ask anything to BEKNMD"),
+        BotCommand("speak", "Voice reply"),
+        BotCommand("voice_on", "Enable auto speech"),
+        BotCommand("voice_off", "Disable auto speech"),
+        BotCommand("language", "Change language"),
+        BotCommand("mode", "Change vibe mode"),
+        BotCommand("voice", "Choose voice"),
+        BotCommand("meme", "Get a meme"),
+        BotCommand("wisdom", "Drop wisdom"),
+        BotCommand("time", "Check server time")
     ])
 
 async def on_shutdown(dp):
     await bot.delete_webhook()
 
-async def main():
-    await start_webhook(
+if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(start_webhook(
         dispatcher=dp,
         webhook_path=WEBHOOK_PATH,
         on_startup=on_startup,
@@ -251,8 +238,4 @@ async def main():
         skip_updates=True,
         host=WEBAPP_HOST,
         port=WEBAPP_PORT
-    )
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())
+    ))
