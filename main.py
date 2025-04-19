@@ -107,6 +107,14 @@ async def start(msg: types.Message):
     init_user(uid)
     await msg.answer("👋 Welcome to BEKNMD — digital nomad is online. Type /help")
 
+@dp.message_handler(commands=["help"])
+async def help_cmd(msg: Message):
+    await msg.answer("""🤖 Available Commands:
+/start /help /ask /speak
+/voice_on /voice_off
+/language /mode /voice
+/wisdom /meme /time""")
+
 @dp.message_handler(commands=["ask"])
 async def ask_cmd(msg: types.Message):
     uid = str(msg.from_user.id)
@@ -121,9 +129,98 @@ async def ask_cmd(msg: types.Message):
         audio = await speak(reply, uid)
         await msg.answer_voice(types.InputFile(audio))
 
+@dp.message_handler(commands=["voice_on"])
+async def voice_on(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    user_prefs[uid]["voice_mode"] = True
+    save_prefs()
+    await msg.answer("🔊 Voice mode: ON")
+
+@dp.message_handler(commands=["voice_off"])
+async def voice_off(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    user_prefs[uid]["voice_mode"] = False
+    save_prefs()
+    await msg.answer("🔇 Voice mode: OFF")
+
+@dp.message_handler(commands=["language"])
+async def set_lang(msg: Message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("English", "Русский", "Español")
+    await msg.answer("🌐 Choose language:", reply_markup=kb)
+
+@dp.message_handler(lambda msg: msg.text in ["English", "Русский", "Español"])
+async def lang_chosen(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    lang = {"English": "en", "Русский": "ru", "Español": "es"}[msg.text]
+    user_prefs[uid]["language"] = lang
+    save_prefs()
+    await msg.answer(f"✅ Language set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
+
+@dp.message_handler(commands=["mode"])
+async def set_mode_cmd(msg: Message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("wise", "meme", "smart")
+    await msg.answer("🎭 Choose vibe:", reply_markup=kb)
+
+@dp.message_handler(lambda msg: msg.text in ["wise", "meme", "smart"])
+async def vibe_mode(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    user_prefs[uid]["mode"] = msg.text
+    save_prefs()
+    await msg.answer(f"✅ Vibe set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
+
+@dp.message_handler(commands=["voice"])
+async def voice_choice(msg: Message):
+    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    kb.add("Sargazy", "Kanykey", "Almambet")
+    await msg.answer("🗣 Choose voice:", reply_markup=kb)
+
+@dp.message_handler(lambda msg: msg.text in ["Sargazy", "Kanykey", "Almambet"])
+async def set_voice(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    user_prefs[uid]["voice"] = msg.text
+    save_prefs()
+    await msg.answer(f"✅ Voice set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
+
+@dp.message_handler(commands=["meme"])
+async def meme(msg: Message):
+    await msg.answer("🧠 Meme of the day: 'Buy high, sell never.'")
+
+@dp.message_handler(commands=["wisdom"])
+async def wisdom(msg: Message):
+    await msg.answer("📜 Wisdom: 'In crypto, silence is a bullish signal.'")
+
+@dp.message_handler(commands=["time"])
+async def time_cmd(msg: Message):
+    await msg.answer("⏰ Server time: " + datetime.now().strftime("%H:%M:%S — %d.%m.%Y"))
+
+@dp.message_handler(commands=["speak"])
+async def speak_cmd(msg: Message):
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    ctx = user_context.get(uid, [])
+    if not ctx:
+        await msg.answer("🛑 Nothing to speak yet. Use /ask first.")
+        return
+    text = ctx[-1]["content"]
+    audio = await speak(text, uid)
+    await msg.answer_voice(types.InputFile(audio))
+
 @dp.message_handler()
 async def fallback(msg: types.Message):
-    await msg.answer("⚠️ Unknown command. Type /ask to chat or /help")
+    uid = str(msg.from_user.id)
+    init_user(uid)
+    reply = await get_ai_response(msg.text, uid)
+    await msg.answer(reply)
+    if user_prefs[uid].get("voice_mode"):
+        audio = await speak(reply, uid)
+        await msg.answer_voice(types.InputFile(audio))
 
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
