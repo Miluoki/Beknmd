@@ -8,7 +8,7 @@ import logging
 import asyncio
 from datetime import datetime
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message, BotCommand
+from aiogram.types import Message, BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from aiogram.utils.executor import set_webhook, start_webhook
 import aiohttp
 from gtts import gTTS
@@ -107,6 +107,25 @@ async def start(msg: types.Message):
     init_user(uid)
     await msg.answer("👋 Welcome to BEKNMD — digital nomad is online. Type /help")
 
+@dp.message_handler(commands=["language"])
+async def choose_lang(msg: Message):
+    kb = InlineKeyboardMarkup(row_width=3)
+    kb.add(
+        InlineKeyboardButton("English", callback_data="lang_en"),
+        InlineKeyboardButton("Русский", callback_data="lang_ru"),
+        InlineKeyboardButton("Español", callback_data="lang_es")
+    )
+    await msg.answer("🌐 Choose language:", reply_markup=kb)
+
+@dp.callback_query_handler(lambda call: call.data.startswith("lang_"))
+async def lang_callback(call: CallbackQuery):
+    uid = str(call.from_user.id)
+    init_user(uid)
+    lang_code = call.data.split("_")[1]
+    user_prefs[uid]["language"] = lang_code
+    save_prefs()
+    await call.message.edit_text(f"✅ Language set to {lang_code}")
+
 @dp.message_handler(commands=["ask"])
 async def ask_cmd(msg: types.Message):
     uid = str(msg.from_user.id)
@@ -121,108 +140,16 @@ async def ask_cmd(msg: types.Message):
         audio = await speak(reply, uid)
         await msg.answer_voice(types.InputFile(audio))
 
-@dp.message_handler(commands=["speak"])
-async def speak_cmd(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    ctx = user_context.get(uid, [])
-    if not ctx:
-        await msg.answer("🛑 Nothing to speak yet. Use /ask first.")
-        return
-    text = ctx[-1]["content"]
-    audio = await speak(text, uid)
-    await msg.answer_voice(types.InputFile(audio))
-
-@dp.message_handler(commands=["voice_on"])
-async def voice_on(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    user_prefs[uid]["voice_mode"] = True
-    save_prefs()
-    await msg.answer("🔊 Voice mode: ON")
-
-@dp.message_handler(commands=["voice_off"])
-async def voice_off(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    user_prefs[uid]["voice_mode"] = False
-    save_prefs()
-    await msg.answer("🔇 Voice mode: OFF")
-
-@dp.message_handler(commands=["language"])
-async def set_lang(msg: Message):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("English", "Русский", "Español")
-    await msg.answer("🌐 Choose language:", reply_markup=kb)
-
-@dp.message_handler(lambda msg: msg.text in ["English", "Русский", "Español"])
-async def lang_chosen(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    lang = {"English": "en", "Русский": "ru", "Español": "es"}[msg.text]
-    user_prefs[uid]["language"] = lang
-    save_prefs()
-    await msg.answer(f"✅ Language set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
-
-@dp.message_handler(commands=["mode"])
-async def set_mode_cmd(msg: Message):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("wise", "meme", "smart")
-    await msg.answer("🎭 Choose vibe:", reply_markup=kb)
-
-@dp.message_handler(lambda msg: msg.text in ["wise", "meme", "smart"])
-async def vibe_mode(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    user_prefs[uid]["mode"] = msg.text
-    save_prefs()
-    await msg.answer(f"✅ Vibe set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
-
-@dp.message_handler(commands=["voice"])
-async def voice_choice(msg: Message):
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add("Sargazy", "Kanykey", "Almambet")
-    await msg.answer("🗣 Choose voice:", reply_markup=kb)
-
-@dp.message_handler(lambda msg: msg.text in ["Sargazy", "Kanykey", "Almambet"])
-async def set_voice(msg: Message):
-    uid = str(msg.from_user.id)
-    init_user(uid)
-    user_prefs[uid]["voice"] = msg.text
-    save_prefs()
-    await msg.answer(f"✅ Voice set to {msg.text}", reply_markup=types.ReplyKeyboardRemove())
-
-@dp.message_handler(commands=["meme"])
-async def meme(msg: Message):
-    await msg.answer("🧠 Meme of the day: 'Buy high, sell never.'")
-
-@dp.message_handler(commands=["wisdom"])
-async def wisdom(msg: Message):
-    await msg.answer("📜 Wisdom: 'In crypto, silence is a bullish signal.'")
-
-@dp.message_handler(commands=["time"])
-async def time_cmd(msg: Message):
-    await msg.answer("⏰ Server time: " + datetime.now().strftime("%H:%M:%S — %d.%m.%Y"))
-
 @dp.message_handler()
 async def fallback(msg: Message):
-    await msg.answer("⚠️ Unknown command. Type /help")
+    await msg.answer("⚠️ Unknown command. Try /ask or /language")
 
 async def on_startup(dp):
     await bot.set_webhook(WEBHOOK_URL)
     await bot.set_my_commands([
         BotCommand("start", "Launch the nomad's world"),
-        BotCommand("help", "Show help menu"),
-        BotCommand("ask", "Ask anything to BEKNMD"),
-        BotCommand("speak", "Voice reply"),
-        BotCommand("voice_on", "Enable auto speech"),
-        BotCommand("voice_off", "Disable auto speech"),
         BotCommand("language", "Change language"),
-        BotCommand("mode", "Change vibe mode"),
-        BotCommand("voice", "Choose voice"),
-        BotCommand("meme", "Get a meme"),
-        BotCommand("wisdom", "Drop wisdom"),
-        BotCommand("time", "Check server time")
+        BotCommand("ask", "Ask anything to BEKNMD")
     ])
 
 async def on_shutdown(dp):
